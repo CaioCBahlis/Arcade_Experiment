@@ -60,3 +60,11 @@ func (p Piece) Cells() [4][2]int {
 	}
 	return cells
 }
+
+// Spawn returns the piece of the given kind at its starting position.
+func Spawn(k Kind) Piece {
+	return Piece{Kind: k, Col: (Width - shapes[k].size) / 2}
+}
+
+// NumKinds is how many distinct tetrominoes exist.
+const NumKinds = int(numKinds)

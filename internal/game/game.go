@@ -56,7 +56,7 @@ func (g *Game) draw() Kind {
 
 func (g *Game) spawn() {
 	g.Spawned++
-	g.Current = Piece{Kind: g.Next, Col: (Width - shapes[g.Next].size) / 2}
+	g.Current = Spawn(g.Next)
 	g.Next = g.draw()
 	if g.Board.Collides(g.Current) {
 		g.Over = true
