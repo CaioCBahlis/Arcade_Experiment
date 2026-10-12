@@ -30,6 +30,7 @@ func All() []Info {
 	return []Info{
 		{"Heuristic", "Scores every placement by height, holes and bumpiness", NewHeuristic},
 		{"Expectimax", "Looks ahead over the next pieces and averages the unknown ones", NewExpectimax},
+		{"Deep Learning", "Neural network over the raw board, trained by self-play (DQN)", NewDeep},
 		{"RL (TD learning)", "Value function learned by self-play at startup", NewRL},
 		{"Random", "Picks a random placement for every piece", NewRandom},
 	}
