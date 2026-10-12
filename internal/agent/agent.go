@@ -29,6 +29,7 @@ type Info struct {
 func All() []Info {
 	return []Info{
 		{"Heuristic", "Scores every placement by height, holes and bumpiness", NewHeuristic},
+		{"RL (TD learning)", "Value function learned by self-play at startup", NewRL},
 		{"Random", "Picks a random placement for every piece", NewRandom},
 	}
 }

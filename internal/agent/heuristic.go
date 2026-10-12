@@ -25,8 +25,21 @@ func NewHeuristic() Agent {
 }
 
 func evaluate(b *game.Board, lines int) float64 {
+	st := measure(b)
+	return wHeight*float64(st.agg) + wLines*float64(lines) + wHoles*float64(st.holes) + wBumpy*float64(st.bumpy)
+}
+
+// stats summarizes the shape of a board.
+type stats struct {
+	agg   int // sum of column heights
+	max   int // tallest column
+	holes int // empty cells with a filled cell above them
+	bumpy int // sum of height differences between adjacent columns
+}
+
+func measure(b *game.Board) stats {
 	var heights [game.Width]int
-	holes := 0
+	var st stats
 	for c := 0; c < game.Width; c++ {
 		seen := false
 		for r := 0; r < game.Height; r++ {
@@ -36,20 +49,22 @@ func evaluate(b *game.Board, lines int) float64 {
 					seen = true
 				}
 			} else if seen {
-				holes++
+				st.holes++
 			}
 		}
 	}
-	agg, bumpy := 0, 0
 	for c, h := range heights {
-		agg += h
+		st.agg += h
+		if h > st.max {
+			st.max = h
+		}
 		if c > 0 {
 			d := h - heights[c-1]
 			if d < 0 {
 				d = -d
 			}
-			bumpy += d
+			st.bumpy += d
 		}
 	}
-	return wHeight*float64(agg) + wLines*float64(lines) + wHoles*float64(holes) + wBumpy*float64(bumpy)
+	return st
 }
