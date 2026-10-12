@@ -4,6 +4,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,6 +15,15 @@ import (
 
 type tickMsg int // carries the generation it was scheduled in
 
+// backMsg asks the parent app to return to the menu.
+type backMsg struct{}
+
+var genCounter int64
+
+// nextGen returns a tick generation unique across every game in the process,
+// so ticks left over from an abandoned game can never match a new one.
+func nextGen() int { return int(atomic.AddInt64(&genCounter, 1)) }
+
 // Model is the Bubble Tea model for a Tetris session.
 type Model struct {
 	g      *game.Game
@@ -23,7 +33,7 @@ type Model struct {
 
 // New returns a model with a freshly seeded game.
 func New() Model {
-	return Model{g: game.New(time.Now().UnixNano())}
+	return Model{g: game.New(time.Now().UnixNano()), gen: nextGen()}
 }
 
 func (m Model) tick() tea.Cmd {
@@ -44,19 +54,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "esc", "ctrl+c":
+		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			return m, func() tea.Msg { return backMsg{} }
 		case "r":
 			m.g = game.New(time.Now().UnixNano())
 			m.paused = false
-			m.gen++
+			m.gen = nextGen()
 			return m, m.tick()
 		case "p":
 			if m.g.Over {
 				return m, nil
 			}
 			m.paused = !m.paused
-			m.gen++
+			m.gen = nextGen()
 			if m.paused {
 				return m, nil
 			}
@@ -194,6 +206,7 @@ func (m Model) sideView() string {
 		dimStyle.Render("space hard drop"),
 		dimStyle.Render("p    pause"),
 		dimStyle.Render("r    restart"),
+		dimStyle.Render("esc  menu"),
 		dimStyle.Render("q    quit"),
 	}
 	if status != "" {
