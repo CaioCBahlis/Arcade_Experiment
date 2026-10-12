@@ -62,21 +62,24 @@ func TestViewsFitTerminal(t *testing.T) {
 	}
 }
 
+// content measures a screen before centering pads it to the terminal size.
+func content(m tea.Model) (w, h int) { return dims(m.(App).screenView()) }
+
 func TestBigTerminalFillsMostOfScreen(t *testing.T) {
 	var m tea.Model = NewApp()
 	m = resize(m, 160, 50)
 	m = press(m, runes("1"))
-	w, h := dims(m.View())
-	if h < 40 {
-		t.Errorf("board height %d on 50-row terminal; should fill most of it", h)
+	w, h := content(m)
+	t.Logf("single-player at 160x50 uses %dx%d", w, h)
+	if h < 42 { // scale 2: 40 board rows + frame
+		t.Errorf("single-player uses %d of 50 rows", h)
 	}
-	t.Logf("single-player at 160x50 renders %dx%d", w, h)
 
 	m = resize(NewApp(), 160, 50)
 	m = press(m, runes("3"))
-	w, h = dims(m.View())
-	if h < 25 {
-		t.Errorf("race height %d on 50-row terminal", h)
+	w, h = content(m)
+	t.Logf("race at 160x50 uses %dx%d", w, h)
+	if h < 42 || w < 120 {
+		t.Errorf("race uses %dx%d of 160x50", w, h)
 	}
-	t.Logf("race at 160x50 renders %dx%d", w, h)
 }

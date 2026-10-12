@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -14,10 +15,14 @@ import (
 )
 
 const (
-	// raceInterval is faster than a watch-along game so a race stays short.
+	// raceInterval is the delay between inputs at the start of a race.
 	raceInterval = 30 * time.Millisecond
-	// raceLength is how many pieces each agent places if it survives.
-	raceLength = 200
+	// raceMinInterval is the fastest the race ever runs.
+	raceMinInterval = 10 * time.Millisecond
+	// roundPieces is how many pieces the leader places per round; the race
+	// speeds up by raceSpeedup at the start of each new round.
+	roundPieces = 25
+	raceSpeedup = 0.93
 )
 
 type racer struct {
@@ -28,7 +33,7 @@ type racer struct {
 
 func (r *racer) placed() int { return r.g.Spawned - 1 }
 
-func (r *racer) finished() bool { return r.g.Over || r.placed() >= raceLength }
+func (r *racer) finished() bool { return r.g.Over }
 
 // Race runs every agent on the same piece sequence, side by side.
 type Race struct {
@@ -70,9 +75,25 @@ func (r Race) done() bool {
 	return true
 }
 
+// round is 1 at the start and advances every roundPieces pieces placed by the
+// furthest-along racer.
+func (r Race) round() int {
+	most := 0
+	for _, rc := range r.racers {
+		most = max(most, rc.placed())
+	}
+	return most/roundPieces + 1
+}
+
+// interval is the current delay between inputs, shrinking each round.
+func (r Race) interval() time.Duration {
+	d := float64(raceInterval) * math.Pow(raceSpeedup, float64(r.round()-1))
+	return max(time.Duration(d), raceMinInterval)
+}
+
 func (r Race) tick() tea.Cmd {
 	gen := r.gen
-	return tea.Tick(raceInterval, func(time.Time) tea.Msg { return tickMsg(gen) })
+	return tea.Tick(r.interval(), func(time.Time) tea.Msg { return tickMsg(gen) })
 }
 
 func (r Race) Init() tea.Cmd { return r.tick() }
@@ -161,14 +182,12 @@ func (r Race) View() string {
 		switch {
 		case rc.g.Over:
 			status = overStyle.Render("TOPPED OUT")
-		case rc.finished():
-			status = dimStyle.Render("finished")
 		}
 		col := lipgloss.JoinVertical(lipgloss.Left,
 			head,
 			renderBoard(rc.g, false, scale),
 			fmt.Sprintf("Score %d", rc.g.Score),
-			fmt.Sprintf("Lines %d  Piece %d", rc.g.Lines, min(rc.placed(), raceLength)),
+			fmt.Sprintf("Lines %d  Piece %d", rc.g.Lines, rc.placed()),
 			status,
 		)
 		cols = append(cols, colStyle.Render(col))
@@ -183,7 +202,8 @@ func (r Race) View() string {
 	case r.paused:
 		foot = titleStyle.Render("PAUSED") + dimStyle.Render("  p: resume · esc: menu")
 	default:
-		foot = dimStyle.Render(fmt.Sprintf("%d pieces each, or until topped out · p: pause · r: restart · esc: menu", raceLength))
+		speed := float64(raceInterval) / float64(r.interval())
+		foot = dimStyle.Render(fmt.Sprintf("Round %d · %.1fx speed · until everyone tops out · p: pause · r: restart · esc: menu", r.round(), speed))
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, cols...) + "\n" + strings.TrimRight(foot, "\n") + "\n"
 }
