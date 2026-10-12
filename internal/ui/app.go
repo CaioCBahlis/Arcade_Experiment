@@ -32,6 +32,7 @@ type App struct {
 	cursor int
 	game   Model
 	race   Race
+	w, h   int // terminal size
 
 	// Where Esc in a game returns to, and which row was selected there.
 	back       screen
@@ -63,6 +64,7 @@ func (a App) entries() []entry {
 		{"Competition", "All agents race side by side on the same pieces", func(a App) (App, tea.Cmd) {
 			a.back, a.backCursor = a.screen, a.cursor
 			a.race = NewRace()
+			a.race.w, a.race.h = a.w, a.h
 			a.screen = raceScreen
 			return a, a.race.Init()
 		}},
@@ -71,12 +73,19 @@ func (a App) entries() []entry {
 
 func (a App) launch(m Model) (App, tea.Cmd) {
 	a.back, a.backCursor = a.screen, a.cursor
+	m.w, m.h = a.w, a.h
 	a.game = m
 	a.screen = gameScreen
 	return a, a.game.Init()
 }
 
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		a.w, a.h = ws.Width, ws.Height
+		a.game.w, a.game.h = ws.Width, ws.Height
+		a.race.w, a.race.h = ws.Width, ws.Height
+		return a, nil
+	}
 	if _, ok := msg.(backMsg); ok {
 		a.screen, a.cursor = a.back, a.backCursor
 		return a, nil
@@ -124,7 +133,17 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 var selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 
+// View renders the current screen, centered in the terminal when its size
+// is known.
 func (a App) View() string {
+	v := strings.TrimRight(a.screenView(), "\n")
+	if a.w > 0 && a.h > 0 {
+		return lipgloss.Place(a.w, a.h, lipgloss.Center, lipgloss.Center, v)
+	}
+	return v + "\n"
+}
+
+func (a App) screenView() string {
 	switch a.screen {
 	case gameScreen:
 		return a.game.View()

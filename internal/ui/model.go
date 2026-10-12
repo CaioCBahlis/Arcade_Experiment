@@ -37,6 +37,19 @@ type Model struct {
 
 	info  *agent.Info // non-nil when a bot is playing
 	agent agent.Agent
+
+	w, h int // terminal size; zero until the first WindowSizeMsg
+}
+
+// sideMinWidth is the room reserved right of the board for the info panel.
+const sideMinWidth = 28
+
+// scale picks the largest board scale that fits the terminal.
+func (m Model) scale() int {
+	return fitScale(m.w, m.h, func(s int) (int, int) {
+		side := max(sideMinWidth, 8*s+4)
+		return boardChars(s) + side, boardChars(s)
+	})
 }
 
 // New returns a model with a freshly seeded game.
@@ -65,6 +78,10 @@ func (m Model) Init() tea.Cmd { return m.tick() }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.w, m.h = msg.Width, msg.Height
+		return m, nil
+
 	case tickMsg:
 		if int(msg) != m.gen || m.paused || m.g.Over {
 			return m, nil
@@ -150,11 +167,12 @@ func paint(kind game.Kind, s string) string {
 	return lipgloss.NewStyle().Foreground(kindColors[kind]).Render(s)
 }
 
-func (m Model) boardView() string { return renderBoard(m.g, true) }
+func (m Model) boardView() string { return renderBoard(m.g, true, m.scale()) }
 
-// renderBoard draws g's playfield inside a frame, optionally with the ghost
-// piece showing where the current piece would land.
-func renderBoard(g *game.Game, showGhost bool) string {
+// renderBoard draws g's playfield inside a frame at the given scale: every
+// cell is 2*scale characters wide and scale rows tall. The ghost piece, when
+// shown, marks where the current piece would land.
+func renderBoard(g *game.Game, showGhost bool, scale int) string {
 	var cur, gh [game.Height][game.Width]bool
 	if showGhost && !g.Over {
 		for _, c := range g.Ghost().Cells() {
@@ -169,28 +187,35 @@ func renderBoard(g *game.Game, showGhost bool) string {
 		}
 	}
 
-	var sb strings.Builder
+	filled := strings.Repeat(block, scale)
+	shadow := strings.Repeat(ghost, scale)
+	rows := make([]string, 0, game.Height*scale)
 	for r := 0; r < game.Height; r++ {
-		for c := 0; c < game.Width; c++ {
-			switch v := g.Board[r][c]; {
-			case v != 0:
-				sb.WriteString(paint(game.Kind(v-1), block))
-			case cur[r][c]:
-				sb.WriteString(paint(g.Current.Kind, block))
-			case gh[r][c]:
-				sb.WriteString(paint(g.Current.Kind, ghost))
-			default:
-				sb.WriteString(dimStyle.Render(dotted))
+		for sub := 0; sub < scale; sub++ {
+			var sb strings.Builder
+			for c := 0; c < game.Width; c++ {
+				switch v := g.Board[r][c]; {
+				case v != 0:
+					sb.WriteString(paint(game.Kind(v-1), filled))
+				case cur[r][c]:
+					sb.WriteString(paint(g.Current.Kind, filled))
+				case gh[r][c]:
+					sb.WriteString(paint(g.Current.Kind, shadow))
+				case sub == 0:
+					// One dot per empty cell, in its top-left corner.
+					sb.WriteString(dimStyle.Render(dotted) + strings.Repeat(" ", 2*scale-2))
+				default:
+					sb.WriteString(strings.Repeat(" ", 2*scale))
+				}
 			}
-		}
-		if r < game.Height-1 {
-			sb.WriteByte('\n')
+			rows = append(rows, sb.String())
 		}
 	}
-	return frameStyle.Render(sb.String())
+	return frameStyle.Render(strings.Join(rows, "\n"))
 }
 
 func (m Model) nextView() string {
+	scale := m.scale()
 	p := game.Piece{Kind: m.g.Next}
 	var grid [4][4]bool
 	for _, c := range p.Offsets() {
@@ -202,14 +227,16 @@ func (m Model) nextView() string {
 		blank := true
 		for c := 0; c < 4; c++ {
 			if grid[r][c] {
-				sb.WriteString(paint(m.g.Next, block))
+				sb.WriteString(paint(m.g.Next, strings.Repeat(block, scale)))
 				blank = false
 			} else {
-				sb.WriteString(empty)
+				sb.WriteString(strings.Repeat(empty, scale))
 			}
 		}
 		if !blank {
-			lines = append(lines, sb.String())
+			for i := 0; i < scale; i++ {
+				lines = append(lines, sb.String())
+			}
 		}
 	}
 	return strings.Join(lines, "\n")

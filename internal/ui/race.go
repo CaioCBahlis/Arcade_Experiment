@@ -35,6 +35,19 @@ type Race struct {
 	racers []*racer
 	paused bool
 	gen    int
+	w, h   int // terminal size; zero until the first WindowSizeMsg
+}
+
+// Rows around the boards: header above; score, lines, status and up to two
+// footer lines below; one spare.
+const raceChrome = 1 + 3 + 2 + 1
+
+// scale picks the largest board scale at which all racers fit side by side.
+func (r Race) scale() int {
+	n := len(r.racers)
+	return fitScale(r.w, r.h, func(s int) (int, int) {
+		return n*boardChars(s) + 2*(n-1), boardChars(s) + raceChrome
+	})
 }
 
 // NewRace starts a race between all available agents. Every agent's game
@@ -66,6 +79,10 @@ func (r Race) Init() tea.Cmd { return r.tick() }
 
 func (r Race) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		r.w, r.h = msg.Width, msg.Height
+		return r, nil
+
 	case tickMsg:
 		if int(msg) != r.gen || r.paused || r.done() {
 			return r, nil
@@ -91,6 +108,7 @@ func (r Race) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return r, func() tea.Msg { return backMsg{} }
 		case "r":
 			n := NewRace()
+			n.w, n.h = r.w, r.h
 			return n, n.tick()
 		case "p":
 			if r.done() {
@@ -119,12 +137,7 @@ func (r Race) ranking() []*racer {
 	return out
 }
 
-const racerWidth = 2*game.Width + 2 // board cells plus the border
-
-var (
-	colStyle    = lipgloss.NewStyle().Width(racerWidth).MarginRight(2)
-	leaderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
-)
+var leaderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
 
 func (r Race) View() string {
 	rank := r.ranking()
@@ -133,6 +146,8 @@ func (r Race) View() string {
 		place[rc] = i + 1
 	}
 	done := r.done()
+	scale := r.scale()
+	colStyle := lipgloss.NewStyle().Width(boardChars(scale)).MarginRight(2)
 
 	var cols []string
 	for _, rc := range r.racers {
@@ -151,7 +166,7 @@ func (r Race) View() string {
 		}
 		col := lipgloss.JoinVertical(lipgloss.Left,
 			head,
-			renderBoard(rc.g, false),
+			renderBoard(rc.g, false, scale),
 			fmt.Sprintf("Score %d", rc.g.Score),
 			fmt.Sprintf("Lines %d  Piece %d", rc.g.Lines, min(rc.placed(), raceLength)),
 			status,
