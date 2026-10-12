@@ -58,3 +58,26 @@ func (b *Board) clearLines() int {
 	}
 	return cleared
 }
+
+// Landing drops p straight down until it rests and returns that piece. The
+// second result is false if p does not fit where it starts.
+func (b *Board) Landing(p Piece) (Piece, bool) {
+	if b.Collides(p) {
+		return p, false
+	}
+	for {
+		q := p
+		q.Row++
+		if b.Collides(q) {
+			return p, true
+		}
+		p = q
+	}
+}
+
+// With returns a copy of the board after locking p and clearing full rows,
+// along with the number of rows cleared. The receiver is unchanged.
+func (b Board) With(p Piece) (Board, int) {
+	b.lock(p)
+	return b, b.clearLines()
+}

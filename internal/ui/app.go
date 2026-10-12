@@ -1,33 +1,39 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"tetris_agents/internal/agent"
 )
 
 type screen int
 
 const (
 	menuScreen screen = iota
+	agentScreen
 	gameScreen
 )
 
-type menuItem struct {
+// entry is one selectable menu row.
+type entry struct {
 	label string
-	start func() Model
+	desc  string
+	run   func(a App) (App, tea.Cmd)
 }
 
-var menuItems = []menuItem{
-	{"Singleplayer", New},
-}
-
-// App is the top-level model: a menu that launches game sessions.
+// App is the top-level model: menus that launch game sessions.
 type App struct {
 	screen screen
 	cursor int
 	game   Model
+
+	// Where Esc in a game returns to, and which row was selected there.
+	back       screen
+	backCursor int
 }
 
 // NewApp returns an App showing the main menu.
@@ -35,9 +41,36 @@ func NewApp() App { return App{} }
 
 func (a App) Init() tea.Cmd { return nil }
 
+func (a App) entries() []entry {
+	if a.screen == agentScreen {
+		var es []entry
+		for _, info := range agent.All() {
+			info := info
+			es = append(es, entry{info.Name, info.Desc, func(a App) (App, tea.Cmd) {
+				return a.launch(NewWithAgent(info))
+			}})
+		}
+		return es
+	}
+	return []entry{
+		{"Singleplayer", "", func(a App) (App, tea.Cmd) { return a.launch(New()) }},
+		{"Agents", "", func(a App) (App, tea.Cmd) {
+			a.screen, a.cursor = agentScreen, 0
+			return a, nil
+		}},
+	}
+}
+
+func (a App) launch(m Model) (App, tea.Cmd) {
+	a.back, a.backCursor = a.screen, a.cursor
+	a.game = m
+	a.screen = gameScreen
+	return a, a.game.Init()
+}
+
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(backMsg); ok {
-		a.screen = menuScreen
+		a.screen, a.cursor = a.back, a.backCursor
 		return a, nil
 	}
 	if a.screen == gameScreen {
@@ -50,50 +83,56 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return a, nil
 	}
+	es := a.entries()
 	switch s := k.String(); s {
-	case "q", "esc", "ctrl+c":
+	case "ctrl+c":
+		return a, tea.Quit
+	case "q", "esc":
+		if a.screen == agentScreen {
+			a.screen, a.cursor = menuScreen, 1 // back onto "Agents"
+			return a, nil
+		}
 		return a, tea.Quit
 	case "up", "k":
-		a.cursor = (a.cursor + len(menuItems) - 1) % len(menuItems)
+		a.cursor = (a.cursor + len(es) - 1) % len(es)
 	case "down", "j":
-		a.cursor = (a.cursor + 1) % len(menuItems)
+		a.cursor = (a.cursor + 1) % len(es)
 	case "enter", " ":
-		return a.launch(a.cursor)
+		return es[a.cursor].run(a)
 	default:
 		// Number keys jump straight to an entry.
-		if len(s) == 1 && s[0] >= '1' && int(s[0]-'1') < len(menuItems) {
-			return a.launch(int(s[0] - '1'))
+		if n, err := strconv.Atoi(s); err == nil && n >= 1 && n <= len(es) {
+			a.cursor = n - 1
+			return es[a.cursor].run(a)
 		}
 	}
 	return a, nil
 }
 
-func (a App) launch(i int) (tea.Model, tea.Cmd) {
-	a.cursor = i
-	a.game = menuItems[i].start()
-	a.screen = gameScreen
-	return a, a.game.Init()
-}
+var selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 
 func (a App) View() string {
 	if a.screen == gameScreen {
 		return a.game.View()
 	}
+	title, hint := "TETRIS", "↑/↓ select · enter start · q quit"
+	if a.screen == agentScreen {
+		title, hint = "AGENTS", "↑/↓ select · enter watch · esc back"
+	}
 	var sb strings.Builder
-	sb.WriteString(titleStyle.Render("TETRIS") + "\n\n")
-	for i, it := range menuItems {
-		line := itoa(i+1) + ". " + it.label
+	sb.WriteString(titleStyle.Render(title) + "\n\n")
+	for i, e := range a.entries() {
+		line := strconv.Itoa(i+1) + ". " + e.label
 		if i == a.cursor {
 			sb.WriteString(selectedStyle.Render("> " + line))
 		} else {
 			sb.WriteString("  " + line)
 		}
 		sb.WriteByte('\n')
+		if e.desc != "" {
+			sb.WriteString("     " + dimStyle.Render(e.desc) + "\n")
+		}
 	}
-	sb.WriteString("\n" + dimStyle.Render("↑/↓ select · enter start · q quit"))
+	sb.WriteString("\n" + dimStyle.Render(hint))
 	return frameStyle.Padding(1, 4).Render(sb.String()) + "\n"
 }
-
-var selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-
-func itoa(n int) string { return string(rune('0' + n)) }

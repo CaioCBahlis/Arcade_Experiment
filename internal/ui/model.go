@@ -10,8 +10,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"tetris_agents/internal/agent"
 	"tetris_agents/internal/game"
 )
+
+// agentInterval is how often a bot issues an input; fast enough to feel
+// live, slow enough to watch pieces move.
+const agentInterval = 60 * time.Millisecond
 
 type tickMsg int // carries the generation it was scheduled in
 
@@ -29,6 +34,9 @@ type Model struct {
 	g      *game.Game
 	paused bool
 	gen    int // bumped whenever the tick chain must restart
+
+	info  *agent.Info // non-nil when a bot is playing
+	agent agent.Agent
 }
 
 // New returns a model with a freshly seeded game.
@@ -36,9 +44,21 @@ func New() Model {
 	return Model{g: game.New(time.Now().UnixNano()), gen: nextGen()}
 }
 
+// NewWithAgent returns a model where the given bot plays instead of the user.
+func NewWithAgent(info agent.Info) Model {
+	m := New()
+	m.info = &info
+	m.agent = info.New()
+	return m
+}
+
 func (m Model) tick() tea.Cmd {
 	gen := m.gen
-	return tea.Tick(m.g.Interval(), func(time.Time) tea.Msg { return tickMsg(gen) })
+	d := m.g.Interval()
+	if m.agent != nil {
+		d = agentInterval
+	}
+	return tea.Tick(d, func(time.Time) tea.Msg { return tickMsg(gen) })
 }
 
 func (m Model) Init() tea.Cmd { return m.tick() }
@@ -49,7 +69,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if int(msg) != m.gen || m.paused || m.g.Over {
 			return m, nil
 		}
-		m.g.Tick()
+		if m.agent != nil {
+			if !agent.Apply(m.g, m.agent.Act(m.g)) {
+				m.g.HardDrop() // blocked: give up on the plan, don't stall
+			}
+		} else {
+			m.g.Tick()
+		}
 		return m, m.tick()
 
 	case tea.KeyMsg:
@@ -60,6 +86,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return backMsg{} }
 		case "r":
 			m.g = game.New(time.Now().UnixNano())
+			if m.info != nil {
+				m.agent = m.info.New()
+			}
 			m.paused = false
 			m.gen = nextGen()
 			return m, m.tick()
@@ -74,7 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.tick()
 		}
-		if m.paused || m.g.Over {
+		if m.paused || m.g.Over || m.agent != nil {
 			return m, nil
 		}
 		switch msg.String() {
@@ -190,8 +219,11 @@ func (m Model) sideView() string {
 	case m.paused:
 		status = titleStyle.Render("PAUSED")
 	}
-	parts := []string{
-		titleStyle.Render("TETRIS"),
+	parts := []string{titleStyle.Render("TETRIS")}
+	if m.info != nil {
+		parts = append(parts, dimStyle.Render("Agent: ")+m.info.Name)
+	}
+	parts = append(parts,
 		"",
 		dimStyle.Render("Next"),
 		m.nextView(),
@@ -200,15 +232,21 @@ func (m Model) sideView() string {
 		fmt.Sprintf("Lines  %d", m.g.Lines),
 		fmt.Sprintf("Level  %d", m.g.Level()),
 		"",
-		dimStyle.Render("←/→  move"),
-		dimStyle.Render("↑    rotate"),
-		dimStyle.Render("↓    soft drop"),
-		dimStyle.Render("space hard drop"),
+	)
+	if m.agent == nil {
+		parts = append(parts,
+			dimStyle.Render("←/→  move"),
+			dimStyle.Render("↑    rotate"),
+			dimStyle.Render("↓    soft drop"),
+			dimStyle.Render("space hard drop"),
+		)
+	}
+	parts = append(parts,
 		dimStyle.Render("p    pause"),
 		dimStyle.Render("r    restart"),
 		dimStyle.Render("esc  menu"),
 		dimStyle.Render("q    quit"),
-	}
+	)
 	if status != "" {
 		parts = append(parts, "", status)
 	}

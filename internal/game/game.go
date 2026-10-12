@@ -15,6 +15,7 @@ type Game struct {
 	Score   int
 	Lines   int
 	Over    bool
+	Spawned int // pieces spawned so far; lets agents tell pieces apart
 
 	rng *rand.Rand
 	bag []Kind
@@ -54,6 +55,7 @@ func (g *Game) draw() Kind {
 }
 
 func (g *Game) spawn() {
+	g.Spawned++
 	g.Current = Piece{Kind: g.Next, Col: (Width - shapes[g.Next].size) / 2}
 	g.Next = g.draw()
 	if g.Board.Collides(g.Current) {
