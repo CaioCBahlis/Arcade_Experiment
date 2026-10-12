@@ -16,6 +16,7 @@ const (
 	menuScreen screen = iota
 	agentScreen
 	gameScreen
+	raceScreen
 )
 
 // entry is one selectable menu row.
@@ -30,6 +31,7 @@ type App struct {
 	screen screen
 	cursor int
 	game   Model
+	race   Race
 
 	// Where Esc in a game returns to, and which row was selected there.
 	back       screen
@@ -58,6 +60,12 @@ func (a App) entries() []entry {
 			a.screen, a.cursor = agentScreen, 0
 			return a, nil
 		}},
+		{"Competition", "All agents race side by side on the same pieces", func(a App) (App, tea.Cmd) {
+			a.back, a.backCursor = a.screen, a.cursor
+			a.race = NewRace()
+			a.screen = raceScreen
+			return a, a.race.Init()
+		}},
 	}
 }
 
@@ -73,9 +81,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.screen, a.cursor = a.back, a.backCursor
 		return a, nil
 	}
-	if a.screen == gameScreen {
+	switch a.screen {
+	case gameScreen:
 		m, cmd := a.game.Update(msg)
 		a.game = m.(Model)
+		return a, cmd
+	case raceScreen:
+		m, cmd := a.race.Update(msg)
+		a.race = m.(Race)
 		return a, cmd
 	}
 
@@ -112,8 +125,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 var selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 
 func (a App) View() string {
-	if a.screen == gameScreen {
+	switch a.screen {
+	case gameScreen:
 		return a.game.View()
+	case raceScreen:
+		return a.race.View()
 	}
 	title, hint := "TETRIS", "↑/↓ select · enter start · q quit"
 	if a.screen == agentScreen {

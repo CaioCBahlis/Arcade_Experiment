@@ -150,16 +150,20 @@ func paint(kind game.Kind, s string) string {
 	return lipgloss.NewStyle().Foreground(kindColors[kind]).Render(s)
 }
 
-func (m Model) boardView() string {
+func (m Model) boardView() string { return renderBoard(m.g, true) }
+
+// renderBoard draws g's playfield inside a frame, optionally with the ghost
+// piece showing where the current piece would land.
+func renderBoard(g *game.Game, showGhost bool) string {
 	var cur, gh [game.Height][game.Width]bool
-	if !m.g.Over {
-		for _, c := range m.g.Ghost().Cells() {
+	if showGhost && !g.Over {
+		for _, c := range g.Ghost().Cells() {
 			if c[0] >= 0 {
 				gh[c[0]][c[1]] = true
 			}
 		}
 	}
-	for _, c := range m.g.Current.Cells() {
+	for _, c := range g.Current.Cells() {
 		if c[0] >= 0 && c[0] < game.Height && c[1] >= 0 && c[1] < game.Width {
 			cur[c[0]][c[1]] = true
 		}
@@ -168,13 +172,13 @@ func (m Model) boardView() string {
 	var sb strings.Builder
 	for r := 0; r < game.Height; r++ {
 		for c := 0; c < game.Width; c++ {
-			switch v := m.g.Board[r][c]; {
+			switch v := g.Board[r][c]; {
 			case v != 0:
 				sb.WriteString(paint(game.Kind(v-1), block))
 			case cur[r][c]:
-				sb.WriteString(paint(m.g.Current.Kind, block))
+				sb.WriteString(paint(g.Current.Kind, block))
 			case gh[r][c]:
-				sb.WriteString(paint(m.g.Current.Kind, ghost))
+				sb.WriteString(paint(g.Current.Kind, ghost))
 			default:
 				sb.WriteString(dimStyle.Render(dotted))
 			}
