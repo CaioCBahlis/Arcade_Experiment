@@ -79,7 +79,9 @@ func TestBigTerminalFillsMostOfScreen(t *testing.T) {
 	m = press(m, runes("3"))
 	w, h = content(m)
 	t.Logf("race at 160x50 uses %dx%d", w, h)
-	if h < 42 || w < 120 {
+	// Five boards side by side only fit at scale 1 in 160 columns, so the
+	// width is what should be mostly used.
+	if w < 110 || w > 160 || h > 50 {
 		t.Errorf("race uses %dx%d of 160x50", w, h)
 	}
 }

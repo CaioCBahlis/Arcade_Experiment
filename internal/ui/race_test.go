@@ -26,18 +26,14 @@ func TestRaceHasNoPieceCapAndSpeedsUp(t *testing.T) {
 	start := m.(Race).interval()
 	// Long enough that the old 200-piece cap would have ended the race for
 	// anyone still alive.
-	for i := 0; i < 20000; i++ {
+	best := 0
+	for i := 0; i < 8000 && best <= 200; i++ {
 		m, _ = m.Update(tickMsg(m.(Race).gen))
-		r := m.(Race)
-		if r.done() {
-			break
+		for _, rc := range m.(Race).racers {
+			best = max(best, rc.placed())
 		}
 	}
 	r := m.(Race)
-	best := 0
-	for _, rc := range r.racers {
-		best = max(best, rc.placed())
-	}
 	if best <= 200 {
 		t.Fatalf("leader placed only %d pieces; race should run past 200", best)
 	}
