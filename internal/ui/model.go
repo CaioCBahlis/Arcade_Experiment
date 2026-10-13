@@ -41,14 +41,18 @@ type Model struct {
 	w, h int // terminal size; zero until the first WindowSizeMsg
 }
 
-// sideMinWidth is the room reserved right of the board for the info panel.
+// sideMinWidth is the width reserved for the info panel under the board.
 const sideMinWidth = 28
+
+// sideRows is the height of the info panel under the board at scale s: the
+// fixed lines (title, agent, stats, controls, status) plus the next piece,
+// which is at most two cells tall.
+func sideRows(s int) int { return 20 + 2*s }
 
 // scale picks the largest board scale that fits the terminal.
 func (m Model) scale() int {
 	return fitScale(m.w, m.h, func(s int) (int, int) {
-		side := max(sideMinWidth, 8*s+4)
-		return boardChars(s) + side, boardChars(s)
+		return max(sideMinWidth, boardChars(s)), boardChars(s) + sideRows(s)
 	})
 }
 
@@ -286,9 +290,9 @@ func (m Model) sideView() string {
 	if status != "" {
 		parts = append(parts, "", status)
 	}
-	return lipgloss.NewStyle().PaddingLeft(2).Render(strings.Join(parts, "\n"))
+	return lipgloss.NewStyle().PaddingLeft(1).Render(strings.Join(parts, "\n"))
 }
 
 func (m Model) View() string {
-	return lipgloss.JoinHorizontal(lipgloss.Top, m.boardView(), m.sideView()) + "\n"
+	return lipgloss.JoinVertical(lipgloss.Left, m.boardView(), m.sideView()) + "\n"
 }

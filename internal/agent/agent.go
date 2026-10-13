@@ -33,6 +33,7 @@ func All() []Info {
 		{"Cross-Entropy", "Evaluation weights tuned by the cross-entropy method", NewCEM},
 		{"Minimax", "Assumes an adversary deals the worst possible piece", NewMinimax},
 		{"Beam Search", "Keeps the best boards over several sampled futures", NewBeam},
+		{"MCTS", "Monte Carlo tree search over sampled futures with greedy rollouts", NewMCTS},
 		{"Deep Learning", "Neural network over the raw board, trained by self-play (DQN)", NewDeep},
 		{"RL (TD learning)", "Value function learned by self-play at startup", NewRL},
 		{"Random", "Picks a random placement for every piece", NewRandom},
