@@ -79,7 +79,9 @@ func TestBigTerminalFillsMostOfScreen(t *testing.T) {
 	m = press(m, runes("1"))
 	w, h := content(m)
 	t.Logf("single-player at 160x50 uses %dx%d", w, h)
-	if h < 42 { // scale 2: 40 board rows + frame
+	// Stacked, scale 2 needs 56 rows, so 50 rows holds scale 1: a 22 row
+	// board plus its info panel.
+	if h < 30 {
 		t.Errorf("single-player uses %d of 50 rows", h)
 	}
 

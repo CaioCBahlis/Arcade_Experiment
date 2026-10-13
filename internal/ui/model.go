@@ -41,18 +41,32 @@ type Model struct {
 	w, h int // terminal size; zero until the first WindowSizeMsg
 }
 
-// sideMinWidth is the width reserved for the info panel under the board.
+// sideMinWidth is the width reserved for the info panel, which sits under
+// the board, or right of it when the terminal is too short to stack them.
 const sideMinWidth = 28
 
-// sideRows is the height of the info panel under the board at scale s: the
-// fixed lines (title, agent, stats, controls, status) plus the next piece,
+// stackedSideRows is the height of the info panel under the board at scale
+// s: the fixed lines (title, stats, controls, status) plus the next piece,
 // which is at most two cells tall.
-func sideRows(s int) int { return 20 + 2*s }
+func stackedSideRows(s int) int { return 10 + 2*s }
+
+// stacked reports whether the info panel goes under the board. It is the
+// default; only a terminal too short for the stack at scale 1 puts the
+// panel beside the board instead.
+func (m Model) stacked() bool {
+	return m.h <= 0 || m.h >= boardChars(1)+stackedSideRows(1)
+}
 
 // scale picks the largest board scale that fits the terminal.
 func (m Model) scale() int {
+	if m.stacked() {
+		return fitScale(m.w, m.h, func(s int) (int, int) {
+			return max(sideMinWidth, boardChars(s)), boardChars(s) + stackedSideRows(s)
+		})
+	}
 	return fitScale(m.w, m.h, func(s int) (int, int) {
-		return max(sideMinWidth, boardChars(s)), boardChars(s) + sideRows(s)
+		side := max(sideMinWidth, 8*s+4)
+		return boardChars(s) + side, boardChars(s)
 	})
 }
 
@@ -251,13 +265,21 @@ func (m Model) nextView() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) sideView() string {
-	var status string
+func (m Model) status() string {
 	switch {
 	case m.g.Over:
-		status = overStyle.Render("GAME OVER") + "\n" + dimStyle.Render("r: play again")
+		return overStyle.Render("GAME OVER") + "\n" + dimStyle.Render("r: play again")
 	case m.paused:
-		status = titleStyle.Render("PAUSED")
+		return titleStyle.Render("PAUSED")
+	}
+	return ""
+}
+
+// sideView is the info panel: compact when it sits under the board, tall
+// when it sits beside it.
+func (m Model) sideView() string {
+	if m.stacked() {
+		return m.stackedSideView()
 	}
 	parts := []string{titleStyle.Render("TETRIS")}
 	if m.info != nil {
@@ -287,12 +309,43 @@ func (m Model) sideView() string {
 		dimStyle.Render("esc  menu"),
 		dimStyle.Render("q    quit"),
 	)
-	if status != "" {
-		parts = append(parts, "", status)
+	if st := m.status(); st != "" {
+		parts = append(parts, "", st)
+	}
+	return lipgloss.NewStyle().PaddingLeft(2).Render(strings.Join(parts, "\n"))
+}
+
+// stackedSideView is the info panel laid out to sit under the board.
+func (m Model) stackedSideView() string {
+	head := titleStyle.Render("TETRIS")
+	if m.info != nil {
+		head += dimStyle.Render("  Agent: ") + m.info.Name
+	}
+	parts := []string{
+		head,
+		fmt.Sprintf("Score %d  Lines %d  Level %d", m.g.Score, m.g.Lines, m.g.Level()),
+		dimStyle.Render("Next"),
+		m.nextView(),
+	}
+	if m.agent == nil {
+		parts = append(parts,
+			dimStyle.Render("←/→ move  ↑ rotate"),
+			dimStyle.Render("↓ soft drop  space hard drop"),
+		)
+	}
+	parts = append(parts,
+		dimStyle.Render("p pause  r restart"),
+		dimStyle.Render("esc menu  q quit"),
+	)
+	if st := m.status(); st != "" {
+		parts = append(parts, st)
 	}
 	return lipgloss.NewStyle().PaddingLeft(1).Render(strings.Join(parts, "\n"))
 }
 
 func (m Model) View() string {
-	return lipgloss.JoinVertical(lipgloss.Left, m.boardView(), m.sideView()) + "\n"
+	if m.stacked() {
+		return lipgloss.JoinVertical(lipgloss.Left, m.boardView(), m.sideView()) + "\n"
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.boardView(), m.sideView()) + "\n"
 }
