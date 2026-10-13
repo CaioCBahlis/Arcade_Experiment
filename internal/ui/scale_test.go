@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"tetris_agents/internal/agent"
 )
 
 func resize(m tea.Model, w, h int) tea.Model {
@@ -50,10 +52,16 @@ func TestViewsFitTerminal(t *testing.T) {
 				m = press(m, runes(key))
 			}
 			gw, gh := dims(m.View())
-			// 80x24 is below the minimum a 3-board race needs; only
-			// require that bigger terminals are respected.
-			if key == "3" && w < 100 {
-				continue
+			// Below the size where even scale 1 fits every board (possibly
+			// wrapped onto rows) there is no layout to check.
+			if key == "3" {
+				n := len(agent.All())
+				bc := boardChars(1)
+				per := max(1, min(n, (w+1)/(bc+1)))
+				rows := (n + per - 1) / per
+				if per*bc+per-1 > w || rows*(bc+raceRowChrome)+raceFooter > h {
+					continue
+				}
 			}
 			if gw > w || gh > h {
 				t.Errorf("%dx%d key %q: view is %dx%d", w, h, key, gw, gh)

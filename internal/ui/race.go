@@ -43,15 +43,31 @@ type Race struct {
 	w, h   int // terminal size; zero until the first WindowSizeMsg
 }
 
-// Rows around the boards: header above; score, lines, status and up to two
-// footer lines below; one spare.
-const raceChrome = 1 + 3 + 2 + 1
+// Rows of text around each board (name above; score, lines and status
+// below) and shared footer lines under all boards.
+const (
+	raceRowChrome = 1 + 3
+	raceFooter    = 2 + 1
+)
 
-// scale picks the largest board scale at which all racers fit side by side.
+// perRow is how many boards fit side by side at scale s, with one space
+// between boards. Boards that do not fit wrap onto further rows.
+func (r Race) perRow(s int) int {
+	n := len(r.racers)
+	if r.w <= 0 {
+		return n
+	}
+	return max(1, min(n, (r.w+1)/(boardChars(s)+1)))
+}
+
+// scale picks the largest board scale at which all racers fit on screen.
 func (r Race) scale() int {
 	n := len(r.racers)
 	return fitScale(r.w, r.h, func(s int) (int, int) {
-		return n*boardChars(s) + 2*(n-1), boardChars(s) + raceChrome
+		per := r.perRow(s)
+		rows := (n + per - 1) / per
+		bc := boardChars(s)
+		return per*bc + per - 1, rows*(bc+raceRowChrome) + raceFooter
 	})
 }
 
@@ -168,7 +184,7 @@ func (r Race) View() string {
 	}
 	done := r.done()
 	scale := r.scale()
-	colStyle := lipgloss.NewStyle().Width(boardChars(scale)).MarginRight(2)
+	colStyle := lipgloss.NewStyle().Width(boardChars(scale))
 
 	var cols []string
 	for _, rc := range r.racers {
@@ -205,5 +221,18 @@ func (r Race) View() string {
 		speed := float64(raceInterval) / float64(r.interval())
 		foot = dimStyle.Render(fmt.Sprintf("Round %d · %.1fx speed · until everyone tops out · p: pause · r: restart · esc: menu", r.round(), speed))
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, cols...) + "\n" + strings.TrimRight(foot, "\n") + "\n"
+	// Boards that do not fit side by side wrap onto further rows.
+	per := r.perRow(scale)
+	var rows []string
+	for i := 0; i < len(cols); i += per {
+		var line []string
+		for j := i; j < min(i+per, len(cols)); j++ {
+			if j > i {
+				line = append(line, " ")
+			}
+			line = append(line, cols[j])
+		}
+		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, line...))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, rows...) + "\n" + strings.TrimRight(foot, "\n") + "\n"
 }
