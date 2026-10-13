@@ -50,24 +50,24 @@ const (
 	raceFooter    = 2 + 1
 )
 
-// perRow is how many boards fit side by side at scale s, with one space
-// between boards. Boards that do not fit wrap onto further rows.
-func (r Race) perRow(s int) int {
+// perRow is how many boards fit side by side with cells of size cs, with one
+// space between boards. Boards that do not fit wrap onto further rows.
+func (r Race) perRow(cs cellSize) int {
 	n := len(r.racers)
 	if r.w <= 0 {
 		return n
 	}
-	return max(1, min(n, (r.w+1)/(boardChars(s)+1)))
+	return max(1, min(n, (r.w+1)/(cs.boardW()+1)))
 }
 
-// scale picks the largest board scale at which all racers fit on screen.
-func (r Race) scale() int {
+// size picks the largest cell size at which all racers fit on screen,
+// falling back to compact cells when even scale 1 would overflow.
+func (r Race) size() cellSize {
 	n := len(r.racers)
-	return fitScale(r.w, r.h, func(s int) (int, int) {
-		per := r.perRow(s)
+	return fitSize(r.w, r.h, func(cs cellSize) (int, int) {
+		per := r.perRow(cs)
 		rows := (n + per - 1) / per
-		bc := boardChars(s)
-		return per*bc + per - 1, rows*(bc+raceRowChrome) + raceFooter
+		return per*cs.boardW() + per - 1, rows*(cs.boardH()+raceRowChrome) + raceFooter
 	})
 }
 
@@ -183,8 +183,8 @@ func (r Race) View() string {
 		place[rc] = i + 1
 	}
 	done := r.done()
-	scale := r.scale()
-	colStyle := lipgloss.NewStyle().Width(boardChars(scale))
+	cs := r.size()
+	colStyle := lipgloss.NewStyle().Width(cs.boardW())
 
 	var cols []string
 	for _, rc := range r.racers {
@@ -201,7 +201,7 @@ func (r Race) View() string {
 		}
 		col := lipgloss.JoinVertical(lipgloss.Left,
 			head,
-			renderBoard(rc.g, false, scale),
+			renderBoard(rc.g, false, cs),
 			fmt.Sprintf("Score %d", rc.g.Score),
 			fmt.Sprintf("Lines %d  Piece %d", rc.g.Lines, rc.placed()),
 			status,
@@ -222,7 +222,7 @@ func (r Race) View() string {
 		foot = dimStyle.Render(fmt.Sprintf("Round %d · %.1fx speed · until everyone tops out · p: pause · r: restart · esc: menu", r.round(), speed))
 	}
 	// Boards that do not fit side by side wrap onto further rows.
-	per := r.perRow(scale)
+	per := r.perRow(cs)
 	var rows []string
 	for i := 0; i < len(cols); i += per {
 		var line []string

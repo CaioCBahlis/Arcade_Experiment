@@ -150,10 +150,9 @@ var kindColors = [...]lipgloss.Color{
 }
 
 const (
-	block  = "██"
-	ghost  = "░░"
-	empty  = "  "
-	dotted = " ·"
+	block = "██"
+	ghost = "░░"
+	empty = "  "
 )
 
 var (
@@ -167,12 +166,11 @@ func paint(kind game.Kind, s string) string {
 	return lipgloss.NewStyle().Foreground(kindColors[kind]).Render(s)
 }
 
-func (m Model) boardView() string { return renderBoard(m.g, true, m.scale()) }
+func (m Model) boardView() string { return renderBoard(m.g, true, scaled(m.scale())) }
 
-// renderBoard draws g's playfield inside a frame at the given scale: every
-// cell is 2*scale characters wide and scale rows tall. The ghost piece, when
-// shown, marks where the current piece would land.
-func renderBoard(g *game.Game, showGhost bool, scale int) string {
+// renderBoard draws g's playfield inside a frame with cells of size cs. The
+// ghost piece, when shown, marks where the current piece would land.
+func renderBoard(g *game.Game, showGhost bool, cs cellSize) string {
 	var cur, gh [game.Height][game.Width]bool
 	if showGhost && !g.Over {
 		for _, c := range g.Ghost().Cells() {
@@ -187,11 +185,18 @@ func renderBoard(g *game.Game, showGhost bool, scale int) string {
 		}
 	}
 
-	filled := strings.Repeat(block, scale)
-	shadow := strings.Repeat(ghost, scale)
-	rows := make([]string, 0, game.Height*scale)
+	filled := strings.Repeat("█", cs.w)
+	shadow := strings.Repeat("░", cs.w)
+	dot := strings.Repeat(" ", cs.w)
+	if cs.w >= 2 {
+		dot = dimStyle.Render(" ·") + strings.Repeat(" ", cs.w-2)
+	} else {
+		dot = dimStyle.Render("·")
+	}
+	blank := strings.Repeat(" ", cs.w)
+	rows := make([]string, 0, game.Height*cs.h)
 	for r := 0; r < game.Height; r++ {
-		for sub := 0; sub < scale; sub++ {
+		for sub := 0; sub < cs.h; sub++ {
 			var sb strings.Builder
 			for c := 0; c < game.Width; c++ {
 				switch v := g.Board[r][c]; {
@@ -203,9 +208,9 @@ func renderBoard(g *game.Game, showGhost bool, scale int) string {
 					sb.WriteString(paint(g.Current.Kind, shadow))
 				case sub == 0:
 					// One dot per empty cell, in its top-left corner.
-					sb.WriteString(dimStyle.Render(dotted) + strings.Repeat(" ", 2*scale-2))
+					sb.WriteString(dot)
 				default:
-					sb.WriteString(strings.Repeat(" ", 2*scale))
+					sb.WriteString(blank)
 				}
 			}
 			rows = append(rows, sb.String())

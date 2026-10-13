@@ -87,9 +87,25 @@ func TestBigTerminalFillsMostOfScreen(t *testing.T) {
 	m = press(m, runes("3"))
 	w, h = content(m)
 	t.Logf("race at 160x50 uses %dx%d", w, h)
-	// Five boards side by side only fit at scale 1 in 160 columns, so the
-	// width is what should be mostly used.
-	if w < 110 || w > 160 || h > 50 {
+	// With every agent racing, normal-size boards do not fit 160x50, so
+	// the race drops to compact cells rather than overflowing.
+	if w < 100 || w > 160 || h > 50 {
 		t.Errorf("race uses %dx%d of 160x50", w, h)
+	}
+}
+
+func TestCompactBoardsFitWhenNormalOnesCannot(t *testing.T) {
+	r := NewRace()
+	r.w, r.h = 120, 40 // too small for the roster at any normal cell size
+	if r.size() != compact {
+		t.Fatalf("size = %+v, want compact", r.size())
+	}
+	w, h := dims(r.View())
+	if w > 120 || h > 40 {
+		t.Errorf("compact race is %dx%d, want within 120x40", w, h)
+	}
+	r.w, r.h = 400, 100
+	if r.size() == compact {
+		t.Error("a huge terminal should not use compact cells")
 	}
 }
